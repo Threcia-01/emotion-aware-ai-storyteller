@@ -11,7 +11,7 @@ const EMOJI_MAP = {
 const QUICK_STORIES = [
   { label: '🐰 Sad bunny', text: 'I feel sad. Tell me a soft bunny story.' },
   { label: '🐉 Happy dragon', text: 'I feel happy! Tell me a playful dragon story.' },
-  { label: '🌲 Safe bedtime', text: 'I feel scared. Tell me a safe forest story.' },
+  { label: '🌙 Safe bedtime', text: 'I feel scared. Tell me a safe forest story.' },
 ]
 
 const EMOTION_COLORS = {
@@ -22,13 +22,14 @@ const EMOTION_COLORS = {
 }
 
 export default function Home() {
-  const [status, setStatus] = useState({ chunk_count: 0, last_emotion: 'neutral', user_emotion: 'neutral', voice_emotion: 'neutral', indexed: false })
+  const [status, setStatus] = useState({ last_emotion: 'neutral', user_emotion: 'neutral', voice_emotion: 'neutral' })
   const [history, setHistory] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingMsg, setLoadingMsg] = useState('')
   const [recording, setRecording] = useState(false)
   const [faceLoading, setFaceLoading] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [error, setError] = useState('')
   const mediaRecorder = useRef(null)
   const audioChunks = useRef([])
@@ -54,16 +55,14 @@ export default function Home() {
   }, [history])
 
   const playAudio = useCallback((b64) => {
+    if (audioRef.current) { audioRef.current.pause() }
     const audio = new Audio(`data:audio/mp3;base64,${b64}`)
     audioRef.current = audio
     audio.play().catch(() => {})
   }, [])
 
   const handleStoryResponse = useCallback((data) => {
-    if (data.error) {
-      setError(data.error)
-      return
-    }
+    if (data.error) { setError(data.error); return }
     setHistory(data.history || [])
     if (data.audio_b64) playAudio(data.audio_b64)
     fetchStatus()
@@ -107,10 +106,7 @@ export default function Home() {
         const form = new FormData()
         form.append('audio', blob, 'recording.webm')
         try {
-          const res = await fetch('http://localhost:8000/api/story/voice', {
-            method: 'POST',
-            body: form,
-          })
+          const res = await fetch('http://localhost:8000/api/story/voice', { method: 'POST', body: form })
           const data = await res.json()
           handleStoryResponse(data)
         } catch {
@@ -136,8 +132,7 @@ export default function Home() {
     setFaceLoading(true)
     setError('')
     try {
-      const res = await fetch('http://localhost:8000/api/emotion/face', { method: 'POST' })
-      const data = await res.json()
+      await fetch('http://localhost:8000/api/emotion/face', { method: 'POST' })
       fetchStatus()
     } catch {
       setError('Face detection failed.')
@@ -149,198 +144,210 @@ export default function Home() {
   const resetStory = async () => {
     await fetch('http://localhost:8000/api/story/reset', { method: 'POST' })
     setHistory([])
+    setSidebarOpen(false)
     fetchStatus()
   }
 
-  const rebuildIndex = async () => {
-    setLoadingMsg('Rebuilding index...')
-    setLoading(true)
-    await fetch('http://localhost:8000/api/index/rebuild', { method: 'POST' })
-    fetchStatus()
-    setLoading(false)
-    setLoadingMsg('')
-  }
-
-  const faceEmoji = EMOJI_MAP[status.user_emotion] || '😐'
-  const voiceEmoji = EMOJI_MAP[status.voice_emotion] || '🎙️'
   const faceColor = EMOTION_COLORS[status.user_emotion] || 'text-slate-400'
   const voiceColor = EMOTION_COLORS[status.voice_emotion] || 'text-slate-400'
+  const faceEmoji = EMOJI_MAP[status.user_emotion] || '😐'
+  const voiceEmoji = EMOJI_MAP[status.voice_emotion] || '🎙️'
 
   return (
-    <div className="min-h-screen bg-[#0d0f14] text-slate-100 flex">
+    <div className="min-h-screen bg-[#0c0e13] text-slate-100 flex flex-col md:flex-row">
+
+      {/* Mobile topbar */}
+      <div className="md:hidden flex items-center justify-between px-4 py-3 bg-[#11131a] border-b border-white/5">
+        <span className="font-semibold text-sm tracking-tight">🎧 Story Friend</span>
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="text-slate-400 hover:text-white transition-colors text-lg"
+        >
+          {sidebarOpen ? '✕' : '☰'}
+        </button>
+      </div>
 
       {/* Sidebar */}
-      <aside className="w-64 bg-[#13151c] border-r border-slate-800 flex flex-col p-5 gap-4 shrink-0">
-        <div>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">Controls</h2>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-slate-500">Chunks</span>
-              <span className="font-mono text-slate-300">{status.chunk_count}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Last emotion</span>
-              <span className={`font-medium ${EMOTION_COLORS[status.last_emotion] || 'text-slate-300'}`}>
-                {status.last_emotion}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Wake word</span>
-              <span className="text-slate-300">openwakeword</span>
-            </div>
+      <aside className={`
+        ${sidebarOpen ? 'flex' : 'hidden'} md:flex
+        w-full md:w-56 bg-[#11131a] border-b md:border-b-0 md:border-r border-white/5
+        flex-col p-4 gap-5 shrink-0
+      `}>
+
+        {/* Emotion status */}
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-600">Current mood</p>
+          <div className="flex items-center gap-2 text-sm">
+            <span className={faceColor}>{faceEmoji}</span>
+            <span className="text-slate-400 capitalize">{status.user_emotion}</span>
+            <span className="text-slate-700 text-xs ml-auto">face</span>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <span className={voiceColor}>{status.voice_emotion !== 'neutral' ? voiceEmoji : '🎙️'}</span>
+            <span className="text-slate-400 capitalize">{status.voice_emotion}</span>
+            <span className="text-slate-700 text-xs ml-auto">voice</span>
           </div>
         </div>
 
+        <div className="h-px bg-white/5" />
+
+        {/* Wake word info */}
+        <div className="space-y-1">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-600">Hands-free</p>
+          <p className="text-xs text-slate-500">
+            Say <span className="text-indigo-400 font-medium">"Hey Mycroft"</span> to record without touching your keyboard
+          </p>
+          <p className="text-[10px] text-slate-700 mt-1">powered by openwakeword</p>
+        </div>
+
+        <div className="h-px bg-white/5" />
+
+        {/* Actions */}
         <div className="space-y-2">
-          <button onClick={resetStory}
-            className="w-full text-left text-sm px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors text-slate-300">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-600">Actions</p>
+          <button
+            onClick={detectFace}
+            disabled={faceLoading}
+            className="w-full text-left text-sm px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-slate-300 disabled:opacity-40"
+          >
+            {faceLoading ? '⏳ Reading...' : '📷 Scan face'}
+          </button>
+          <button
+            onClick={resetStory}
+            className="w-full text-left text-sm px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-slate-300"
+          >
             🔄 New story
           </button>
-          <button onClick={rebuildIndex} disabled={loading}
-            className="w-full text-left text-sm px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors text-slate-300 disabled:opacity-50">
-            🔨 Rebuild index
-          </button>
         </div>
 
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">Quick stories</p>
-          <div className="space-y-2">
-            {QUICK_STORIES.map((s) => (
-              <button key={s.label} onClick={() => sendText(s.text)} disabled={loading}
-                className="w-full text-left text-sm px-3 py-2 rounded-lg bg-[#1a1d26] hover:bg-slate-700 transition-colors text-slate-300 disabled:opacity-50">
-                {s.label}
-              </button>
-            ))}
-          </div>
+        <div className="h-px bg-white/5" />
+
+        {/* Quick stories */}
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-600">Quick stories</p>
+          {QUICK_STORIES.map((s) => (
+            <button
+              key={s.label}
+              onClick={() => { sendText(s.text); setSidebarOpen(false) }}
+              disabled={loading}
+              className="w-full text-left text-sm px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-slate-300 disabled:opacity-40"
+            >
+              {s.label}
+            </button>
+          ))}
         </div>
       </aside>
 
-      {/* Main */}
-      <main className="flex-1 flex flex-col max-w-3xl mx-auto w-full px-6 py-8">
+      {/* Main content */}
+      <main className="flex-1 flex flex-col h-[calc(100vh-48px)] md:h-screen min-h-0">
 
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-3">
-            <span className="text-4xl">🎧</span>
-            Emotion-Aware Story Friend
+        {/* Header desktop only */}
+        <div className="hidden md:block px-6 pt-7 pb-3">
+          <h1 className="text-2xl font-bold tracking-tight text-white">
+            🎧 Emotion-Aware Story Friend
           </h1>
-          <p className="text-slate-500 mt-1 text-sm">Hold the mic button to speak, or type your request below</p>
-        </div>
-
-        {/* Emotion bar */}
-        <div className="flex gap-4 mb-6">
-          <div className="flex-1 bg-[#13151c] rounded-xl border border-slate-800 p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Face emotion</p>
-              <p className={`text-lg font-semibold ${faceColor}`}>
-                {faceEmoji} {status.user_emotion}
-              </p>
-            </div>
-            <button onClick={detectFace} disabled={faceLoading}
-              className="px-3 py-2 text-sm rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors disabled:opacity-50 disabled:cursor-wait">
-              {faceLoading ? 'Reading...' : '📷 Read Face'}
-            </button>
-          </div>
-
-          <div className="flex-1 bg-[#13151c] rounded-xl border border-slate-800 p-4">
-            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Voice emotion</p>
-            <p className={`text-lg font-semibold ${voiceColor}`}>
-              {status.voice_emotion !== 'neutral'
-                ? `${voiceEmoji} ${status.voice_emotion}`
-                : '🎙️ —'}
-            </p>
-          </div>
+          <p className="text-slate-500 text-sm mt-0.5">
+            Speak or type — stories adapt to how you feel
+          </p>
         </div>
 
         {/* Error */}
         {error && (
-          <div className="mb-4 px-4 py-3 rounded-lg bg-red-900/30 border border-red-800 text-red-300 text-sm">
+          <div className="mx-4 md:mx-6 mt-3 px-4 py-2.5 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm">
             {error}
           </div>
         )}
 
-        {/* Chat history */}
-        <div className="flex-1 overflow-y-auto space-y-4 mb-6 min-h-[200px]">
+        {/* Chat area */}
+        <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-4 min-h-0">
           {history.length === 0 && !loading && (
-            <div className="text-center text-slate-600 text-sm mt-16">
-              <p className="text-4xl mb-3">📖</p>
-              <p>Your story will appear here.</p>
-              <p className="mt-1">Speak a request or type below to begin.</p>
+            <div className="flex flex-col items-center justify-center h-full text-center gap-2 py-20">
+              <span className="text-5xl">📖</span>
+              <p className="text-slate-500 text-sm mt-2">Your story will appear here</p>
+              <p className="text-slate-600 text-xs">Type a request or hold the mic to speak</p>
             </div>
           )}
+
           {history.map((msg, i) => (
             <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-                msg.role === 'user'
-                  ? 'bg-indigo-600 text-white rounded-br-sm'
-                  : 'bg-[#1a1d26] text-slate-200 border border-slate-800 rounded-bl-sm'
-              }`}>
+              <div className={`
+                max-w-[85%] md:max-w-[75%] px-4 py-3 text-sm leading-relaxed
+                ${msg.role === 'user'
+                  ? 'bg-indigo-600 text-white rounded-3xl rounded-br-md'
+                  : 'bg-[#181b24] text-slate-200 border border-white/5 rounded-3xl rounded-bl-md'
+                }
+              `}>
                 {msg.content}
               </div>
             </div>
           ))}
+
           {loading && (
             <div className="flex justify-start">
-              <div className="bg-[#1a1d26] border border-slate-800 px-4 py-3 rounded-2xl rounded-bl-sm text-sm text-slate-400 flex items-center gap-2">
-                <span className="animate-pulse">●</span>
-                <span className="animate-pulse delay-75">●</span>
-                <span className="animate-pulse delay-150">●</span>
-                <span className="ml-2">{loadingMsg}</span>
+              <div className="bg-[#181b24] border border-white/5 px-5 py-3.5 rounded-3xl rounded-bl-md text-sm text-slate-500 flex items-center gap-1.5">
+                <span className="animate-bounce" style={{ animationDelay: '0ms' }}>·</span>
+                <span className="animate-bounce" style={{ animationDelay: '150ms' }}>·</span>
+                <span className="animate-bounce" style={{ animationDelay: '300ms' }}>·</span>
+                <span className="ml-2 text-slate-600 text-xs">{loadingMsg}</span>
               </div>
             </div>
           )}
+
           <div ref={chatEndRef} />
         </div>
 
-        {/* Input area */}
-        <div className="bg-[#13151c] border border-slate-800 rounded-2xl p-3 flex items-end gap-3">
+        {/* Input bar */}
+        <div className="px-4 md:px-6 py-4 border-t border-white/5">
+          <div className="flex items-center gap-2 bg-[#181b24] rounded-3xl px-3 py-3 border border-white/5">
 
-          {/* Mic button */}
-          <button
-            onMouseDown={startRecording}
-            onMouseUp={stopRecording}
-            onTouchStart={startRecording}
-            onTouchEnd={stopRecording}
-            disabled={loading}
-            className={`shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all ${
-              recording
-                ? 'bg-red-500 scale-110 shadow-lg shadow-red-500/30'
-                : 'bg-slate-700 hover:bg-slate-600'
-            } disabled:opacity-50`}
-            title="Hold to record"
-          >
-            {recording ? '⏹' : '🎙️'}
-          </button>
+            {/* Mic */}
+            <button
+              onMouseDown={startRecording}
+              onMouseUp={stopRecording}
+              onTouchStart={startRecording}
+              onTouchEnd={stopRecording}
+              disabled={loading}
+              className={`
+                shrink-0 w-10 h-10 rounded-2xl flex items-center justify-center text-base transition-all
+                ${recording
+                  ? 'bg-red-500 shadow-lg shadow-red-500/25 scale-110'
+                  : 'bg-white/5 hover:bg-white/10 text-slate-400'
+                }
+                disabled:opacity-40
+              `}
+            >
+              {recording ? '⏹' : '🎙️'}
+            </button>
 
-          {/* Text input */}
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                sendText(input)
-              }
-            }}
-            placeholder="Tell me a story about a rabbit, dragon, forest..."
-            rows={1}
-            disabled={loading}
-            className="flex-1 bg-transparent text-slate-200 placeholder-slate-600 text-sm resize-none outline-none leading-6 max-h-32 overflow-y-auto disabled:opacity-50"
-          />
+            {/* Text input */}
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  sendText(input)
+                }
+              }}
+              placeholder="Tell me a story about a rabbit, dragon, forest..."
+              rows={1}
+              disabled={loading}
+              className="flex-1 bg-transparent text-slate-200 placeholder-slate-600 text-sm resize-none outline-none leading-6 max-h-28 overflow-y-auto py-3 disabled:opacity-40"
+            />
 
-          {/* Send button */}
-          <button
-            onClick={() => sendText(input)}
-            disabled={!input.trim() || loading}
-            className="shrink-0 w-11 h-11 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
-          >
-            ↑
-          </button>
+            {/* Send */}
+            <button
+              onClick={() => sendText(input)}
+              disabled={!input.trim() || loading}
+              className="shrink-0 w-10 h-10 rounded-2xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-white transition-colors text-sm font-medium"
+            >
+              ↑
+            </button>
+          </div>
+          <p className="text-center text-[10px] text-slate-700 mt-2">
+            Hold mic · Press Enter to send · Say "Hey Mycroft" hands-free
+          </p>
         </div>
-
-        <p className="text-center text-xs text-slate-700 mt-3">
-          Hold mic to record voice • Press Enter or ↑ to send text
-        </p>
       </main>
     </div>
   )

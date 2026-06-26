@@ -1,130 +1,211 @@
 # Emotion-Aware Story Friend
 
-Emotion-Aware Story Friend is a Streamlit app that listens to a child’s request, detects emotion from voice and optionally from the webcam, retrieves supporting story context, generates a short comforting story, and reads it aloud. The current project is organized around a Streamlit UI layer, a RAG and TTS engine, a voice pipeline, webcam emotion detection, and a background wake-word listener.
+An AI-powered storytelling app that detects emotion from your voice and face, then generates and narrates a short comforting story adapted to how you feel.
+
+Built as a final year B.Tech capstone project at Babu Banarasi Das University.
+
+---
+
+## Demo
+
+> Speak a request or type it — the app reads your emotion, generates a story using a RAG pipeline powered by LLaMA 3.3 70B, and reads it back to you in an emotion-matched voice.
+
+---
+
+## Architecture
+
+```
+Next.js Frontend (localhost:3000)
+        ↕ REST API
+FastAPI Backend (localhost:8000)
+        ↕
+Python ML Modules
+├── rag.py          — RAG story generation + TTS
+├── voice_input.py  — Speech-to-text + voice emotion
+├── webcam.py       — Face emotion detection
+└── wake_word.py    — Hands-free wake word listener
+```
+
+---
 
 ## Features
 
-- Streamlit interface for typed and voice-first storytelling interactions.
-- Wake-word support through a background listener with direct post-wake recording.
-- Voice transcription using Azure Speech-to-Text with Whisper fallback.
-- Voice emotion detection using SpeechBrain.
-- Face emotion detection using DeepFace and OpenCV.
-- Retrieval-augmented story generation with ChromaDB and NVIDIA-hosted models.
-- Emotion-aware speech synthesis using Azure Speech, with Edge TTS fallback.
-- Conversation memory for short multi-turn storytelling sessions.
+- **Emotion-aware stories** — detects emotion from voice (SpeechBrain) and face (DeepFace + OpenCV), fuses signals with priority `voice > camera > text`
+- **RAG story generation** — retrieves context from ChromaDB, generates stories using NVIDIA-hosted LLaMA 3.3 70B
+- **Emotion-matched TTS** — Azure Neural TTS with Edge TTS fallback, different voice profile per emotion
+- **Hands-free mode** — say "Hey Mycroft" to trigger recording via OpenWakeWord
+- **Voice input** — Azure Speech-to-Text with OpenAI Whisper fallback
+- **Conversation memory** — multi-turn storytelling sessions
+- **Next.js frontend** — responsive React UI with Tailwind CSS, replaces original Streamlit interface
 
-## Current project structure
+---
 
-```text
+## Project Structure
+
+```
 .
-├── app.py              # Streamlit UI, session flow, wake polling, playback
-├── rag.py              # RAG indexing/retrieval, emotion fusion, story generation, TTS
-├── voice_input.py      # Audio decoding, trimming, STT, speech emotion recognition
-├── webcam.py           # Webcam capture and face emotion detection
-├── wake_word.py        # Background wake-word listener and direct microphone recording
-├── requirements.txt    # Python dependencies for the current codebase
-├── README.md           # Project documentation
-├── .env                # Local secrets and configuration (create manually)
-├── docs/               # Optional .txt knowledge/story source files
-└── chroma_db/          # Persistent Chroma vector store (created at runtime)
+├── app.py              # Original Streamlit UI (kept for reference)
+├── api_server.py       # FastAPI backend — wraps all Python ML modules
+├── rag.py              # RAG indexing, story generation, emotion fusion, TTS
+├── voice_input.py      # Audio decoding, STT, voice emotion detection
+├── webcam.py           # Webcam capture, face emotion detection
+├── wake_word.py        # Background wake-word listener
+├── requirements.txt    # Python dependencies
+├── .env                # Local secrets (create manually, never commit)
+├── docs/               # Optional .txt story source files for RAG
+├── chroma_db/          # Persistent ChromaDB vector store (created at runtime)
+└── nextjs-frontend/    # Next.js + Tailwind CSS frontend
+    ├── app/
+    │   ├── page.jsx    # Main UI — chat, mic, emotion display
+    │   ├── layout.jsx
+    │   └── globals.css
+    ├── package.json
+    └── ...
 ```
 
-## How the app works
+---
 
-1. `app.py` starts the Streamlit interface and indexes documents from `docs/` if available.
-2. User input can come from typed text, manual audio input, or a wake-word triggered recording flow.
-3. `voice_input.py` prepares audio, runs speech-to-text, and predicts voice emotion.
-4. `webcam.py` can detect facial emotion when the user asks the app to read the face.
-5. `rag.py` fuses emotion signals with priority `voice > camera > text`, retrieves context from ChromaDB, generates a short story, and synthesizes speech output.
-6. The generated MP3 is played back in the Streamlit app.
+## Tech Stack
 
-## Environment variables
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 14, React 18, Tailwind CSS |
+| Backend API | FastAPI, Uvicorn |
+| Story Generation | LLaMA 3.3 70B via NVIDIA API, ChromaDB (RAG) |
+| Voice Emotion | SpeechBrain |
+| Face Emotion | DeepFace, OpenCV |
+| Speech-to-Text | Azure Speech Services, OpenAI Whisper (fallback) |
+| Text-to-Speech | Azure Neural TTS, Edge TTS (fallback) |
+| Wake Word | OpenWakeWord, Porcupine (optional) |
 
-Create a `.env` file in the project root.
+---
 
-Required:
+## Setup
 
-```env
-NVIDIA_API_KEY=your_nvidia_api_key
+### Prerequisites
+
+- Python 3.11
+- Node.js 18+
+- A microphone and webcam
+
+### 1. Clone the repo
+
+```bash
+git clone https://github.com/Threcia-01/emotion-aware-ai-storyteller.git
+cd emotion-aware-ai-storyteller
 ```
 
-Optional but recommended:
-
-```env
-AZURE_SPEECH_KEY=your_azure_speech_key
-AZURE_SPEECH_REGION=centralindia
-PORCUPINE_ACCESS_KEY=your_porcupine_access_key
-WHISPER_MODEL=base
-```
-
-Notes:
-
-- `NVIDIA_API_KEY` is required because `rag.py` initializes the NVIDIA embedding and chat client at import time.
-- `AZURE_SPEECH_KEY` enables Azure STT and Azure TTS; without it, STT falls back to Whisper and TTS falls back to Edge TTS.
-- `PORCUPINE_ACCESS_KEY` is only needed when using the Porcupine backend for wake-word detection.
-- If no wake-word backend is installed or configured, the app can still run with typed input and manual audio input.
-
-## Installation
-
-### 1. Create a virtual environment
-
-Windows PowerShell:
+### 2. Create Python virtual environment
 
 ```powershell
+# Windows
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-Linux/macOS:
-
 ```bash
+# Mac/Linux
 python -m venv .venv
 source .venv/bin/activate
 ```
 
-### 2. Install dependencies
+### 3. Install Python dependencies
 
 ```bash
 pip install -r requirements.txt
+pip install fastapi uvicorn python-multipart
 ```
 
-### 3. Add optional story documents
+### 4. Create your .env file
 
-Create a `docs/` folder beside `app.py` and place `.txt` files inside it. These are chunked and indexed into ChromaDB for retrieval. `dialogs.txt` is skipped by the current indexing logic.
+```env
+# Required
+NVIDIA_API_KEY=your_nvidia_api_key
 
-Example:
+# Optional — Azure Speech (falls back to Whisper STT + Edge TTS without this)
+AZURE_SPEECH_KEY=your_azure_speech_key
+AZURE_SPEECH_REGION=centralindia
 
-```text
+# Optional — Porcupine wake word (falls back to OpenWakeWord without this)
+PORCUPINE_ACCESS_KEY=your_porcupine_access_key
+
+# Optional — Whisper model size
+WHISPER_MODEL=base
+```
+
+Get your free NVIDIA API key at [build.nvidia.com](https://build.nvidia.com)
+
+### 5. Add story documents (optional)
+
+```
 docs/
 ├── animals.txt
 ├── bedtime.txt
 └── forest_adventure.txt
 ```
 
-### 4. Run the app
+Plain `.txt` files placed here are chunked and indexed into ChromaDB for retrieval.
+
+### 6. Start the FastAPI backend
 
 ```bash
-streamlit run app.py
+uvicorn api_server:app --reload --port 8000
 ```
 
-## Dependency notes
+Wait for `Application startup complete.`
 
-- `streamlit` powers the UI.
-- `chromadb`, `openai`, and `python-dotenv` are used by the RAG pipeline.
-- `transformers`, `torch`, and `torchaudio` support text and audio emotion models.
-- `speechbrain`, `soundfile`, `numpy`, and `pydub` support voice preprocessing and emotion detection.
-- `deepface` and `opencv-python` support webcam emotion detection.
-- `azure-cognitiveservices-speech` and `edge-tts` provide speech services.
-- `openwakeword`, `pvporcupine`, and `pyaudio` support wake-word detection and microphone capture.
-- `openai-whisper` is required for the offline transcription fallback used by `voice_input.py`.
+### 7. Start the Next.js frontend
 
-## Run checklist
+Open a second terminal:
 
-- Make sure a microphone is connected and allowed by the OS.
-- For webcam emotion detection, ensure a working camera is available.
-- For Windows, `PyAudio` may require a wheel installation if normal pip install fails.
-- The first run may download model files for SpeechBrain, Transformers, DeepFace, or Whisper.
+```bash
+cd nextjs-frontend
+npm install
+npm run dev
+```
 
-## Current behavior reflected here
+Open [http://localhost:3000](http://localhost:3000)
 
-This README matches the present code structure in `app.py`, `rag.py`, `voice_input.py`, `webcam.py`, and `wake_word.py`, including wake-word polling, Azure STT with Whisper fallback, emotion-aware TTS, and runtime-created `docs/` and `chroma_db/` folders.
+---
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/status` | Current emotion state and index info |
+| POST | `/api/story/text` | Generate story from text input |
+| POST | `/api/story/voice` | Generate story from voice recording |
+| POST | `/api/emotion/face` | Detect emotion from webcam |
+| POST | `/api/story/reset` | Reset conversation history |
+| POST | `/api/index/rebuild` | Rebuild ChromaDB index from docs/ |
+
+---
+
+## How It Works
+
+1. User speaks or types a request in the Next.js frontend
+2. Frontend sends audio or text to the FastAPI backend
+3. `voice_input.py` transcribes audio and detects voice emotion via SpeechBrain
+4. `webcam.py` optionally detects facial emotion via DeepFace
+5. `rag.py` fuses emotion signals, retrieves story context from ChromaDB, generates a story using LLaMA 3.3 70B, and synthesizes speech with emotion-matched TTS
+6. Frontend receives the story text and base64 audio, displays and plays it back
+
+---
+
+## My Contribution
+
+This was a group final year project. My specific contributions:
+
+- Built the entire Next.js frontend and FastAPI integration layer
+- Replaced the original Streamlit UI with a decoupled React + FastAPI architecture
+- Integrated all Python ML modules (`rag.py`, `webcam.py`, `voice_input.py`) via REST APIs
+- Handled data cleaning and preprocessing pipeline for RAG story documents
+- Debugged and fixed dependency issues across Python 3.11, TensorFlow 2.21, and edge-tts
+
+---
+
+## Notes
+
+- First run downloads model files for SpeechBrain, DeepFace, and Whisper — may take a few minutes
+- Microphone and camera permissions required in browser
+- On Windows, PyAudio is included in requirements.txt as a prebuilt wheel
